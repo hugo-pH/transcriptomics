@@ -6,15 +6,15 @@ output: html_document
 runtime: shiny
 ---
 
-Perform PCA over the input data ("Expression.RMA.txt"). By default it uses all the samples but you can choose a subset by unchecking "Select all samples".
-```{r, echo=FALSE}
+Perform PCA on the input data ("Expression.RMA.txt"). By default it uses all the samples but you can choose a subset by unchecking "Select all samples".
+```{r, echo=FALSE, message=FALSE}
 library(reshape2)
 library(dplyr)
 library(ggplot2)
 library(knitr)
-data.rma <- read.delim("/home/hugo/R/transcriptomics/Expression.RMA.txt") 
+data.rma <- read.delim("./Expression.RMA.txt") 
 colnames(data.rma)<-gsub("gFG_", "", colnames(data.rma))
-design <- read.delim("/home/hugo/R/transcriptomics/design.txt")
+design <- read.delim("./design.txt")
 # Make a designfile without the common reference information
 design<- design[which(design$Dye=="Cy3"), ]
 annot <- data.rma[,c(1:13)]

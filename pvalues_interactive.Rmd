@@ -5,6 +5,8 @@ date: "11/23/2014"
 output: html_document
 runtime: shiny
 ---
+This document compare the gene expression values of two groups. For each gene, it perform a t-test with Empirical Bayes correction and multiple testing correction. As inputs, it uses the "Expression.RMA.txt" and the "design.txt" files. 
+
 
 ##Choose the groups
 ```{r, echo=FALSE, message=FALSE}
@@ -17,84 +19,90 @@ library(ggplot2)
 library(knitr)
 
 inputPanel(
-  selectInput('group1', 'Choose samples for group 1:', choices=c(1:8), multiple=TRUE, selectize=TRUE),
-  selectInput('group2', 'Choose samples for group 2:', choices=c(1:8), multiple=TRUE, selectize=TRUE)
-
-)
+  selectInput('group1', 'Choose group 1 samples:', choices=c(1:8), multiple=TRUE, selectize=TRUE),
+  selectInput('group2', 'Choose group 2 samples:', choices=c(1:8), multiple=TRUE, selectize=TRUE)
+  
+  )
 # 
-design <- read.delim("/home/hugo/R/transcriptomics/design.txt")
+design <- read.delim("./design.txt")
 design <- design[which(design$Dye=="Cy3"), ]
-data.rma.full <- read.delim("/home/hugo/R/transcriptomics/Expression.RMA.txt") 
+data.rma.full <- tbl_df(read.delim("./Expression.RMA.txt"))
 annot <- data.rma.full[,c(1:13)]
 data.rma <- as.matrix(data.rma.full[,-c(1:13)])
 groups <- design$SampleID
 
+
+#This reactive object contains the user groups choices.
 groups.input<-reactive({
   group1 <- as.list(input$group1)
   group2 <- as.list(input$group2)
-
+  
   group.ls<-list("group1"= group1, "group2"=group2)
+  
+  })
 
-})
-
-
-tblPval<-reactive({
+#This reactive object perform the t-test and create a df as output
+Pval.annot<-reactive({
   group1 <- as.list(input$group1)
   group2 <- as.list(input$group2)
-
-idx1 <- which(groups %in% group1)
-idx2 <- which(groups %in% group2)
-x <- data.rma[,c(idx1,idx2)]
-
-# The following code will perform a t-test, with Empirical Bayes correction and multiple testing correction:
-factorlevels <- c(rep(1,length(idx1)),rep(2,length(idx2)))
-# factorlevels
-design.mat <- model.matrix(~ 0+factor(factorlevels))
-colnames(design.mat) <- c("group1", "group2")
-# design.mat
-fit <- lmFit(x, design.mat)
-# fit$coef[1:10,]
-contrast.matrix <- makeContrasts(group2-group1, levels=design.mat)
-fit2 <- contrasts.fit(fit, contrast.matrix)
-fit2 <- eBayes(fit2)
-# topTable(fit2, adjust="BH")
-
-tblPval <- topTable(fit2, adjust="BH",number=nrow(data.rma))
+  
+  idx1 <- which(groups %in% group1)
+  idx2 <- which(groups %in% group2)
+  x <- data.rma[,c(idx1,idx2)]
+  
+  # The following code will perform a t-test, with Empirical Bayes correction and multiple testing correction:
+  factorlevels <- c(rep(1,length(idx1)),rep(2,length(idx2)))
+  design.mat <- model.matrix(~ 0+factor(factorlevels))
+  colnames(design.mat) <- c("group1", "group2")
+  fit <- lmFit(x, design.mat)
+  contrast.matrix <- makeContrasts(group2-group1, levels=design.mat)
+  fit2 <- contrasts.fit(fit, contrast.matrix)
+  fit2 <- eBayes(fit2)
+  tblPval <- topTable(fit2, adjust="BH",number=nrow(data.rma))
+  
+  #Now merge the results with the annot df. It will be useful later to have this information in the same df. 
+  #First create a now with in both dataframe containing the row name.
   annot$idx<-as.vector(rownames(annot), mode="numeric")
   tblPval$idx<-as.vector(rownames(tblPval), mode="numeric")
+  #Merge both df by the new column
   Pval.annot<-merge(annot, tblPval, by="idx")
+  #Sort the df in decreasing order by the corrected pvalue 
   Pval.annot<-arrange(Pval.annot, adj.P.Val)
   Pval.annot
-
-
-
-})
+  
+  
+  
+  })
 
 ```
 
-##Design file:
+####Design file:
 ```{r, echo=FALSE, message=FALSE}
+#Print the design file,  only show: Array, SampleID, O2, time columns. 
+#Sort by SampleID
 renderTable({
-  arrange(design, SampleID)[, c("Array", "SampleID", "O2", "time")]
-})
+  arrange(select(design, Array, SampleID, O2, time), SampleID)
+  
+  })
 ```
 
-
+##20 most significant genes
+Here we plot and describe the genes returning the 20 most significant p-values from t-test between the two groups. 
 ```{r, echo=FALSE}
 
 renderPlot({
   group1 <- as.list(input$group1)
   group2 <- as.list(input$group2)
   
-  Pval.annot<-tblPval()
+  Pval.annot<-Pval.annot()[1:20,]
   #Remove "gFG_" from data.rma.full column names. Later it will be useful to merge with Pval.annot
   colnames(data.rma.full)<-gsub("gFG_", "", colnames(data.rma.full))
   #Remove all annotation columns except the GeneName
   data.rma.full<-data.rma.full[, -c(1:6, 8:13)]
   
-  
-  genes<-as.character(Pval.annot$GeneName[1:10])
-  #Remove empty string from the top 10 genes
+  genes<-as.character(Pval.annot$GeneName)
+ 
+  #Remove empty string from the top 20 genes
   genes<-genes[genes != ""]  
   #Get the Array number for each sample in group 1. First get the rows from the samples .
   #I do that to later select the columns of the samples from the data.rmn.full df
@@ -104,11 +112,11 @@ renderPlot({
   #Do the same for group2
   group2df<-filter(design, SampleID %in% group2)
   array2<-as.character(unique(group2df$Array))
-
-  #Select the columns from the samples and the GeneNames
+  
+  #From the input data (data.rma.full), select the columns of the samples and the GeneNames
   groups.col.df<-data.rma.full[, c("GeneName", array1, array2)]
   
-  ##select the rows containing the 10 genes of lower pvalue from df
+  #select the rows containing the 20 genes of lower pvalue from df
   genes.wide.df <- filter(groups.col.df, GeneName %in% genes)
   #Transform from wide to long format, now 3 columns, the geneName, the array number and the expression value
   genes.df<-melt(genes.wide.df)
@@ -116,62 +124,67 @@ renderPlot({
   colnames(genes.df)<-c("GeneName", "Array", "logratio")
   #merge with design file by the Array column. 
   #This add append to the genes.df all the information about the samples contained in the design file
-#   design.no.array<-design[,-c(1,4)]
+  #   design.no.array<-design[,-c(1,4)]
   df<-merge(genes.df, design, by="Array")
   df<-select(df, GeneName, logratio, SampleID, O2, time)
   #Sort by sampleID to plor the results ordered
   DF<-summarise(group_by(df, SampleID, GeneName), mean = mean(logratio), sd=sd(logratio))
-#   design.no.array<-filter(design.no.array, )
+  #   design.no.array<-filter(design.no.array, )
   design.m<-unique(select(design, SampleID, O2, time))
   DF<-merge(DF, design.m, by="SampleID")
   DF<-arrange(DF, as.factor(SampleID))
   DF$group<-interaction(DF$time, DF$O2)
   p<-ggplot(DF, aes(as.factor(SampleID), mean)) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
- p + geom_bar(aes(fill=group), stat="identity") +
-#   p + geom_bar(stat="identity") +
-  geom_errorbar(aes(ymin= mean - sd, ymax=mean + sd), width=0.25) +
-  facet_wrap(~GeneName)
- 
+  p + geom_bar(aes(fill=group), stat="identity") +
+    #   p + geom_bar(stat="identity") +
+    geom_errorbar(aes(ymin= mean - sd, ymax=mean + sd), width=0.25) +
+    facet_wrap(~GeneName)
   
-})
+  
+  })
 
 
 renderTable({
-tbl<-tblPval()
-t<-select(tbl, Name, GeneName, Description, logFC)[1:10,]
-t
-
-})
+  Pval.annot<-Pval.annot()[1:20,]
+  t<-select(Pval.annot, Name, GeneName, Description)
+  t
+  
+  })
 ```
 
 ##Significant pvalues
+
+Volcano plot showing the significance of the obtained pvalues (cutoff at 0.01). Blue dots stand for logFC returning significant pvalues. 
 ```{r, echo=FALSE}
 
-renderPlot({
-df.plot<-tblPval()
-  
-df.plot$threshold = as.factor(df.plot$adj.P.Val < 0.01 | abs(df.plot$logFC) > 2)
-
-#####Look att this link for the volcano plot with ggplot
-# http://bioinformatics.knowledgeblog.org/2011/06/21/volcano-plots-of-microarray-data/
-
-g = ggplot(data=df.plot, aes(x=logFC, y=-log10(adj.P.Val), colour=threshold)) +
-  geom_point(alpha=0.4, size=1.75) +
-  theme(legend.position = "none") +
-  scale_x_continuous(breaks=-10:10) +
-  scale_y_continuous(breaks=0:10) +
-#   geom_text(aes(label=GeneName, size=1.2), colour="black") +
-#   xlim(c(-10, 10)) + ylim(c(0, 15)) +
-  xlab("log2 fold change") + ylab("-log10 p-value")
-g
-})
-
 renderText({
-  tbl<-tblPval()
-  nm<-as.character(length(which(tbl$adj.P.Val < 0.01)))
-#   print("sdfs")
+  Pval.annot<-Pval.annot()
+  nm<-as.character(length(which(Pval.annot$adj.P.Val < 0.01)))
+  #   print("sdfs")
   paste("Number of pvalues < 0.01: ", nm)
-})
+  })
+
+
+renderPlot({
+  Pval.annot<-Pval.annot()
+  #Create a column   
+  Pval.annot$threshold = as.factor(Pval.annot$adj.P.Val < 0.01)
+  
+  #####Look att this link for the volcano plot with ggplot
+  # http://bioinformatics.knowledgeblog.org/2011/06/21/volcano-plots-of-microarray-data/
+  
+  g = ggplot(data=Pval.annot, aes(x=logFC, y=-log10(adj.P.Val), colour=threshold)) +
+    geom_point(alpha=0.4, size=1.75) +
+    theme(legend.position = "none") +
+    scale_x_continuous(breaks=-10:10) +
+    scale_y_continuous(breaks=0:10) +
+    #   geom_text(aes(label=GeneName, size=1.2), colour="black") +
+    #   xlim(c(-10, 10)) + ylim(c(0, 15)) +
+    xlab("log2 fold change") + ylab("-log10 p-value")
+  g
+  })
+
+
 ```
 
 
