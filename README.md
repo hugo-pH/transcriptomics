@@ -7,6 +7,7 @@ Part of the code comes from the course material provided by Martijs Jonker.
 Tools:
 
 + **pvalue-interactive.Rmd**: interactive document to peform t-test between genes of 2 groups of samples and visualize the results. 
++ **PCA.Rmd:** interactive document to perform PCA on all the samples or a subset. 
 
 
 ####Packages

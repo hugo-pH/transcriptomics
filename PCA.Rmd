@@ -1,0 +1,105 @@
+---
+title: "PCA"
+author: "hugo pineda"
+date: "11/25/2014"
+output: html_document
+runtime: shiny
+---
+
+Perform PCA over the input data ("Expression.RMA.txt"). By default it uses all the samples but you can choose a subset by unchecking "Select all samples".
+```{r, echo=FALSE}
+library(reshape2)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+data.rma <- read.delim("/home/hugo/R/transcriptomics/Expression.RMA.txt") 
+colnames(data.rma)<-gsub("gFG_", "", colnames(data.rma))
+design <- read.delim("/home/hugo/R/transcriptomics/design.txt")
+# Make a designfile without the common reference information
+design<- design[which(design$Dye=="Cy3"), ]
+annot <- data.rma[,c(1:13)]
+data.rma<-data.rma[,c(14:29)]
+
+
+
+inputPanel(
+  checkboxInput("all", "Select all samples", value=TRUE),
+  
+  selectInput('sample', 'Choose a subgroup of samples:', choices=c(1:8), multiple=TRUE, selectize=TRUE)
+  
+  )
+
+rotation<-reactive({
+  if (input$all == FALSE){
+    samples=input$sample
+    }else{
+      samples=unique(design$SampleID)
+      }
+  
+  #   samples=c(1,2,3,5)
+  samples.cols<-filter(design, SampleID %in% samples)
+  #get array number as character
+  arrays<-as.character(unique(samples.cols$Array))
+  #get the columns of the selected samples
+  data<-data.rma[, c(arrays)]
+  PCA <- prcomp(t(as.matrix(data)))
+  rotation<-PCA$rotation
+  cont.labels<-tbl_df(cbind(rotation, annot))
+  t<-as.data.frame(cont.labels)
+  })
+
+data<-reactive({
+  if (input$all == FALSE){
+    samples=input$sample
+    }else{
+      samples=unique(design$SampleID)
+      }
+  samples.cols<-filter(design, SampleID %in% samples)
+  #get array number as character
+  arrays<-as.character(unique(samples.cols$Array))
+  #get the columns of the selected samples
+  data<-data.rma[, c(arrays)]
+  PCA <- prcomp(t(as.matrix(data)))
+  #Get PC data from PCA list
+  PCA.df<-as.data.frame(PCA$x)
+  #merge PCA.df with design_aerobic to plot the results
+  PCA.df.labels<-merge(PCA.df, design, by.x = "row.names", by.y = "Array")
+  PCA.df.labels$group<-interaction(PCA.df.labels$time, PCA.df.labels$O2)
+  PCA.df.labels
+  })
+
+
+renderPlot({
+  df<-data()
+  
+  p<-ggplot(df, aes(x=PC1, y=PC2, label = SampleID)) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.text = element_text(size = 12)) +
+    geom_text(aes(colour=as.factor(group)), size=6)
+  
+  p
+  })
+
+```
+
+##Ten genes most negatively affected by PC1
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+renderTable({
+  df<-rotation()
+  df<-arrange(df, PC1)[1:10,]
+  select(df, Name, GeneName, Description, PC1)                
+  })
+
+```
+
+
+##Ten genes most positively affected by PC1
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+renderTable({
+  df<-rotation()
+  df<-arrange(df, desc(PC1))[1:10,]
+  select(df, Name, GeneName, Description, PC1)                
+  })
+
+```
