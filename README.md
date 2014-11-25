@@ -7,3 +7,18 @@ Part of the code comes from the course material provided by Martijs Jonker.
 Tools:
 
 + **pvalue-interactive.Rmd**: interactive document to peform t-test between genes of 2 groups of samples and visualize the results. 
+
+
+####Packages
+
+You need some packages to run these tools.
+
++ limma from bioconductor
++ reshape2
++ dplyr
++ ggplot2
++ knitr
++ rmarkdown
++ shiny
+
+*install packages using "install.packages("package")"*
