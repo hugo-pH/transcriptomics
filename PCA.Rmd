@@ -103,3 +103,26 @@ renderTable({
   })
 
 ```
+
+##Ten genes most negatively affected by PC2
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+renderTable({
+  df<-rotation()
+  df<-arrange(df, PC2)[1:10,]
+  select(df, Name, GeneName, Description, PC2)                
+  })
+
+```
+
+
+##Ten genes most positively affected by PC2
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+renderTable({
+  df<-rotation()
+  df<-arrange(df, desc(PC2))[1:10,]
+  select(df, Name, GeneName, Description, PC2)                
+  })
+
+```
