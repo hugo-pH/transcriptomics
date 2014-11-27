@@ -18,15 +18,15 @@ library(dplyr)
 library(ggplot2)
 library(knitr)
 
-inputPanel(
-  selectInput('group1', 'Choose group 1 samples:', choices=c(1:8), multiple=TRUE, selectize=TRUE),
-  selectInput('group2', 'Choose group 2 samples:', choices=c(1:8), multiple=TRUE, selectize=TRUE)
-  
-  )
-# 
+
+#Create the user inputs for selecting the sample groups
+selectInput('group1', 'Choose group 1 samples:', choices=c(1:8), multiple=TRUE, selectize=TRUE, selected=c(1,5))
+selectInput('group2', 'Choose group 2 samples:', choices=c(1:8), multiple=TRUE, selectize=TRUE, selected=3)
+
+#Read data
 design <- read.delim("./design.txt")
-design <- design[which(design$Dye=="Cy3"), ]
-data.rma.full <- tbl_df(read.delim("./Expression.RMA.txt"))
+design <- filter(design, Dye=="Cy3")
+data.rma.full <- read.delim("./Expression.RMA.txt")
 annot <- data.rma.full[,c(1:13)]
 data.rma <- as.matrix(data.rma.full[,-c(1:13)])
 groups <- design$SampleID
@@ -61,16 +61,56 @@ Pval.annot<-reactive({
   tblPval <- topTable(fit2, adjust="BH",number=nrow(data.rma))
   
   #Now merge the results with the annot df. It will be useful later to have this information in the same df. 
-  #First create a now with in both dataframe containing the row name.
+  #First create a row in both dataframes containing the row name.
   annot$idx<-as.vector(rownames(annot), mode="numeric")
   tblPval$idx<-as.vector(rownames(tblPval), mode="numeric")
   #Merge both df by the new column
   Pval.annot<-merge(annot, tblPval, by="idx")
   #Sort the df in decreasing order by the corrected pvalue 
   Pval.annot<-arrange(Pval.annot, adj.P.Val)
-  Pval.annot
+  Pval.annot  
+  })
+
+
+#Create a reactive dataframe containing 4 columns: "GeneName", "mean", "sd", "group".
+#"mean" and "sd" contain logratio mean value and standard deviation of each sample. 
+#"group" is the combination of "O2"+"time". It is used in the plot
+data.plot<-reactive({
+  group1 <- as.list(input$group1)
+  group2 <- as.list(input$group2)
+  #Remove "gFG_" from data.rma.full column names. Later it will be useful to merge with Pval.annot
+  colnames(data.rma.full)<-gsub("gFG_", "", colnames(data.rma.full))
+  #Remove all annotation columns except the GeneName
+  data.rma.full<-data.rma.full[, -c(1:6, 8:13)]
   
+  #Get the Array number for each sample in group 1. First get the rows from the samples .
+  #I do that to later select the columns of the samples from the data.rmn.full df
+  group1df<-filter(design, SampleID %in% group1)
+  #get array number as character
+  array1<-as.character(unique(group1df$Array))
+  #Do the same for group2
+  group2df<-filter(design, SampleID %in% group2)
+  array2<-as.character(unique(group2df$Array))
   
+  #From the input data (data.rma.full), select the columns of the samples and the GeneNames
+  genes.wide.df<-data.rma.full[, c("GeneName", array1, array2)]
+  
+  #Transform from wide to long format, now 3 columns, the geneName, the array number and the expression value
+  genes.df<-melt(genes.wide.df)
+  #Change the colnames to merge by Array column
+  colnames(genes.df)<-c("GeneName", "Array", "logratio")
+  #merge with design file by the Array column. 
+  #This add append to the genes.df all the information about the samples contained in the design file
+  #   design.no.array<-design[,-c(1,4)]
+  df<-merge(genes.df, design, by="Array")
+  df<-select(df, GeneName, logratio, SampleID, O2, time)
+  #Sort by sampleID to plor the results ordered
+  DF<-summarise(group_by(df, SampleID, GeneName), mean = mean(logratio), sd=sd(logratio))
+  design.m<-unique(select(design, SampleID, O2, time))
+  DF<-merge(DF, design.m, by="SampleID")
+  DF<-arrange(DF, as.factor(SampleID))
+  DF$group<-interaction(DF$time, DF$O2)
+  DF
   
   })
 
@@ -86,75 +126,88 @@ renderTable({
   })
 ```
 
-##20 most significant genes
-Here we plot and describe the genes returning the 20 most significant p-values from t-test between the two groups. 
+
+##Search for a gene
+```{r, echo=FALSE, message=FALSE}
+# textInput('gene', 'Choose a gene:')
+selectInput('gene', 'Choose gene:', choices=as.character(annot$GeneName), multiple=TRUE, selectize=TRUE)
+
+
+renderPlot({
+  gene<-input$gene
+  data.plot<-as.data.frame(data.plot())
+  data.plot<-filter(data.plot, GeneName %in% gene)
+  data.plot<-as.data.frame(data.plot)
+  
+  p<-ggplot(data.plot, aes(as.factor(SampleID), mean)) + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.text = element_text(size = 12))
+  p + geom_bar(aes(fill=group), stat="identity") +
+    #   p + geom_bar(stat="identity") +
+    geom_errorbar(aes(ymin= mean - sd, ymax=mean + sd), width=0.25) +
+    facet_wrap(~GeneName)
+  })
+
+```
+
+
+###Adjusted P-values of the selected genes
+```{r,echo=FALSE, message=FALSE}
+renderTable({
+  Pval.annot<-Pval.annot()
+  genes<-input$gene
+  #Avoid to print all the genes with an empty GeneName
+  if (length(genes) < 1){
+    paste("Select a gene.")
+    }else{
+      select(filter(Pval.annot, GeneName %in% genes), GeneName, adj.P.Val)
+        }
+  
+  }, digits=10)
+
+```
+
+
+
+##20 most significant adj. P-values
+Here we plot and describe the genes returning the 20 most significant adjusted P-values from t-test between the two groups. 
 ```{r, echo=FALSE}
 
 renderPlot({
-  group1 <- as.list(input$group1)
-  group2 <- as.list(input$group2)
-  
+  #Get the 20 first rows of Pval.annot (contains the pvalues and gene info).
+  #The df is order by adj.P.Val from lower to higher so the 20 first rows correspond to the 20 most significant pvalues
   Pval.annot<-Pval.annot()[1:20,]
-  #Remove "gFG_" from data.rma.full column names. Later it will be useful to merge with Pval.annot
-  colnames(data.rma.full)<-gsub("gFG_", "", colnames(data.rma.full))
-  #Remove all annotation columns except the GeneName
-  data.rma.full<-data.rma.full[, -c(1:6, 8:13)]
-  
+  #get the names of the 20 most significant genes
   genes<-as.character(Pval.annot$GeneName)
- 
+  data.plot<-data.plot()
   #Remove empty string from the top 20 genes
   genes<-genes[genes != ""]  
-  #Get the Array number for each sample in group 1. First get the rows from the samples .
-  #I do that to later select the columns of the samples from the data.rmn.full df
-  group1df<-filter(design, SampleID %in% group1)
-  #get array number as character
-  array1<-as.character(unique(group1df$Array))
-  #Do the same for group2
-  group2df<-filter(design, SampleID %in% group2)
-  array2<-as.character(unique(group2df$Array))
+  data.plot <- filter(data.plot, GeneName %in% genes)
   
-  #From the input data (data.rma.full), select the columns of the samples and the GeneNames
-  groups.col.df<-data.rma.full[, c("GeneName", array1, array2)]
-  
-  #select the rows containing the 20 genes of lower pvalue from df
-  genes.wide.df <- filter(groups.col.df, GeneName %in% genes)
-  #Transform from wide to long format, now 3 columns, the geneName, the array number and the expression value
-  genes.df<-melt(genes.wide.df)
-  #Change the colnames to merge by Array column
-  colnames(genes.df)<-c("GeneName", "Array", "logratio")
-  #merge with design file by the Array column. 
-  #This add append to the genes.df all the information about the samples contained in the design file
-  #   design.no.array<-design[,-c(1,4)]
-  df<-merge(genes.df, design, by="Array")
-  df<-select(df, GeneName, logratio, SampleID, O2, time)
-  #Sort by sampleID to plor the results ordered
-  DF<-summarise(group_by(df, SampleID, GeneName), mean = mean(logratio), sd=sd(logratio))
-  #   design.no.array<-filter(design.no.array, )
-  design.m<-unique(select(design, SampleID, O2, time))
-  DF<-merge(DF, design.m, by="SampleID")
-  DF<-arrange(DF, as.factor(SampleID))
-  DF$group<-interaction(DF$time, DF$O2)
-  p<-ggplot(DF, aes(as.factor(SampleID), mean)) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  p<-ggplot(data.plot, aes(as.factor(SampleID), mean)) + theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.text = element_text(size = 12))
   p + geom_bar(aes(fill=group), stat="identity") +
     #   p + geom_bar(stat="identity") +
     geom_errorbar(aes(ymin= mean - sd, ymax=mean + sd), width=0.25) +
     facet_wrap(~GeneName)
   
-  
   })
 
-
-renderTable({
-  Pval.annot<-Pval.annot()[1:20,]
-  t<-select(Pval.annot, Name, GeneName, Description)
-  t
-  
-  })
 ```
 
-##Significant pvalues
+###Gene details
+```{r, echo=FALSE, message=FALSE}
+#Print a table with the gene details for the most 20 significant genes
+renderTable({
+  Pval.annot<-Pval.annot()[1:20,]
+  t<-select(Pval.annot, Name, GeneName, Description, adj.P.Val)
+  t
+  
+  }, digits=10)
+```
 
-Volcano plot showing the significance of the obtained pvalues (cutoff at 0.01). Blue dots stand for logFC returning significant pvalues. 
+
+
+##Significant adjusted P-values
+
+Volcano plot showing the significance of the adj. P-values (cutoff at 0.01). Blue dots shows logFC returning significant P-values. 
 ```{r, echo=FALSE}
 
 renderText({
@@ -167,10 +220,10 @@ renderText({
 
 renderPlot({
   Pval.annot<-Pval.annot()
-  #Create a column   
+  #Create a column containing a logical vector of those adj.P.vals < 0.01
   Pval.annot$threshold = as.factor(Pval.annot$adj.P.Val < 0.01)
   
-  #####Look att this link for the volcano plot with ggplot
+  #The volcano plot is extracted from here:
   # http://bioinformatics.knowledgeblog.org/2011/06/21/volcano-plots-of-microarray-data/
   
   g = ggplot(data=Pval.annot, aes(x=logFC, y=-log10(adj.P.Val), colour=threshold)) +
