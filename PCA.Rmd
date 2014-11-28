@@ -81,47 +81,47 @@ renderPlot({
 
 ```
 
-##Ten genes most negatively affected by PC1
+##20 genes most negatively affected by PC1
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 renderTable({
   df<-rotation()
-  df<-arrange(df, PC1)[1:10,]
+  df<-arrange(df, PC1)[1:20,]
   select(df, Name, GeneName, Description, PC1)                
   })
 
 ```
 
 
-##Ten genes most positively affected by PC1
+##20 genes most positively affected by PC1
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 renderTable({
   df<-rotation()
-  df<-arrange(df, desc(PC1))[1:10,]
+  df<-arrange(df, desc(PC1))[1:20,]
   select(df, Name, GeneName, Description, PC1)                
   })
 
 ```
 
-##Ten genes most negatively affected by PC2
+##20 genes most negatively affected by PC2
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 renderTable({
   df<-rotation()
-  df<-arrange(df, PC2)[1:10,]
+  df<-arrange(df, PC2)[1:20,]
   select(df, Name, GeneName, Description, PC2)                
   })
 
 ```
 
 
-##Ten genes most positively affected by PC2
+##20 genes most positively affected by PC2
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 renderTable({
   df<-rotation()
-  df<-arrange(df, desc(PC2))[1:10,]
+  df<-arrange(df, desc(PC2))[1:20,]
   select(df, Name, GeneName, Description, PC2)                
   })
 
