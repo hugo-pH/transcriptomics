@@ -84,7 +84,7 @@ p<-ggplot(df.plot, aes(x=logproteome, y=logFC)) +
   #Add the labels for GeneNames
   geom_text(aes(label=GeneName), size=8) +
   #add axis names
-  xlab(expression(log2(frac(+O[2] , -O[2]))*" Proteins")) +
-  ylab(expression(log2(frac(+O[2] , -O[2]))*" Transcripts"))
+  xlab(expression(log2(frac(-O[2] , +O[2]))*" Proteins")) +
+  ylab(expression(log2(frac(-O[2] , +O[2]))*" Transcripts"))
 
 p
