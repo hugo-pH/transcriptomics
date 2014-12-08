@@ -6,8 +6,8 @@ library(limma)
 library(reshape2)
 library(dplyr)
 library(ggplot2)
-
-
+library(pathview)
+library(gage)
 
 #Read the transcriptomics data
 design <- read.delim("./design.txt")
@@ -45,30 +45,46 @@ tblPval$idx<-as.vector(rownames(tblPval), mode="numeric")
 Pval.annot<-merge(annot, tblPval, by="idx")
 #Sort the df in decreasing order by the corrected pvalue 
 Pval.annot<-arrange(Pval.annot, adj.P.Val)
+#Select columns of interest
+transcrip<-dplyr::select(Pval.annot, Name, GeneName, logFC)
 
 
 
 #Read proteome file. You have to provide the path and name to your proteome data.
 #CAUTION HERE. Be sure that your data is separated by tabs or choose the correct value for the "sep" argument
-#Do not modify the column names of the original file, otherwise it won't work
-proteom_raw<-read.delim("PATH TO FILE HERE", sep = "\t")
-#Get the GeneName from the ID column of proteome data which is in this form: "sw|P00331|ADH2_YEAST"
-#Remove the first part before the GeneName "sw|P00331|"
-proteom_raw$ID<-gsub(".*\\|", "", proteom_raw$ID)
-#Remove the string after the GeneNanem "_YEAST"
-proteom_raw$ID<-gsub("_YEAST", "", proteom_raw$ID)
-#Create a new column containing the log of l.h column
-proteom<-mutate(proteom_raw, logproteome = log2(l.h))
-#Select columns from Pval.annot (GeneName, logFC)
-transcrip<-select(Pval.annot, GeneName, logFC)
+#The .csv should contain two columns, the first is the ID column from the excel file.
+#The second column is "l.h" column from the excel file
+#Column names should be "ID" and "l.h"
+proteom_raw<-read.delim("PATH TO YOUR FILE HERE", sep = "\t")
+#Remove NAs from raw data
+proteom<-filter(proteom_raw, l.h != "NA")
+#Get the Uniprot ID from the ID column of proteome data which is in this form: "sw|P00331|ADH2_YEAST"
+#This regular expression returns "P00331" from "sw|P00331|ADH2_YEAST"
+proteom$uniprot<-gsub("(^.+\\|)(.+)(\\|.+$)", "\\2", proteom$ID)
+#Map ID from Uniprot to Entrez. "id2eg" is a function from pathview package
+proteom$entrez <- id2eg(ids = proteom$uniprot, category = gene.idtype.list[7], pkg.name = "org.Sc.sgd.db")[,2]
+#Get the logarithm of l.h, remove columns returning "-Inf" and select columns of interest
+proteom<-mutate(proteom, logproteome = log2(l.h))
+proteom<-filter(proteom, logproteome != "-Inf" )
+proteom<-dplyr::select(proteom, entrez, logproteome)
+
+
+
 #Merge both df by GeneName
-df.plot<-merge(transcrip, proteom, by.x="GeneName", by.y="ID")
+df.plot<-merge(transcrip, proteom, by.x="Name", by.y="entrez")
 
 #Plot the results
 p<-ggplot(df.plot, aes(x=logproteome, y=logFC)) +
+  scale_x_continuous(limits=c(-7, 7))+
   #Add axis
   geom_hline(aes(yintercept=0)) +
   geom_vline(aes(xintercept=0)) +
+  theme(axis.title.x = element_text(size=18),
+        axis.title.y = element_text(size=18)) +
   #Add the labels for GeneNames
-  geom_text(aes(label=GeneName), size=4)
+  geom_text(aes(label=GeneName), size=8) +
+  #add axis names
+  xlab(expression(log2(frac(+O[2] , -O[2]))*" Proteins")) +
+  ylab(expression(log2(frac(+O[2] , -O[2]))*" Transcripts"))
+
 p
