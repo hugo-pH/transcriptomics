@@ -52,10 +52,10 @@ transcrip<-dplyr::select(Pval.annot, Name, GeneName, logFC)
 
 #Read proteome file. You have to provide the path and name to your proteome data.
 #CAUTION HERE. Be sure that your data is separated by tabs or choose the correct value for the "sep" argument
-#The .csv should contain two columns, the first is the ID column from the excel file.
+#The .csv should contain TWO COLUMNS, the first is the ID column from the excel file.
 #The second column is "l.h" column from the excel file
 #Column names should be "ID" and "l.h"
-proteom_raw<-read.delim("PATH TO YOUR FILE HERE", sep = "\t")
+proteom_raw<-read.delim("PATH TO THE FILE", sep = "\t")
 #Remove NAs from raw data
 proteom<-filter(proteom_raw, l.h != "NA")
 #Get the Uniprot ID from the ID column of proteome data which is in this form: "sw|P00331|ADH2_YEAST"
@@ -73,18 +73,27 @@ proteom<-dplyr::select(proteom, entrez, logproteome)
 #Merge both df by GeneName
 df.plot<-merge(transcrip, proteom, by.x="Name", by.y="entrez")
 
-#Plot the results
-p<-ggplot(df.plot, aes(x=logproteome, y=logFC)) +
-  scale_x_continuous(limits=c(-7, 7))+
-  #Add axis
-  geom_hline(aes(yintercept=0)) +
-  geom_vline(aes(xintercept=0)) +
-  theme(axis.title.x = element_text(size=18),
-        axis.title.y = element_text(size=18)) +
-  #Add the labels for GeneNames
-  geom_text(aes(label=GeneName), size=8) +
-  #add axis names
-  xlab(expression(log2(frac(-O[2] , +O[2]))*" Proteins")) +
-  ylab(expression(log2(frac(-O[2] , +O[2]))*" Transcripts"))
+# nor.trans<-ad.test(df.plot$logFC)
+# nor.prot<-ad.test(df.plot$logproteome)
+# cor<-cor.test(df.plot$logFC, df.plot$logproteome)
+# p.value<-cor["p.value"]
 
-p
+#Plot the results
+  p<-ggplot(df.plot, aes(x=logproteome, y=logFC)) +
+    scale_x_continuous(breaks=-6:6)+
+    scale_y_continuous(breaks=-5:5)+
+    
+    #Add axis
+    geom_hline(aes(yintercept=0)) +
+    geom_vline(aes(xintercept=0)) +
+    theme(axis.title.x = element_text(size=18),
+          axis.title.y = element_text(size=18)) +
+    geom_smooth(method="lm") +
+    #Add the labels for GeneNames
+    geom_text(aes(label=GeneName), size=8) +
+#     annotate("text" , x=-5, y=c(2, 1.5), label=c("r = 0.66", "p.value = 2.2e-16"), size=8, , color="#013ADF") + 
+    #add axis names
+    xlab(expression(log2(frac(-O[2] , +O[2]))*" Proteins")) +
+    ylab(expression(log2(frac(-O[2] , +O[2]))*" Transcripts"))
+  
+  p
