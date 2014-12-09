@@ -7,7 +7,7 @@ library(reshape2)
 library(dplyr)
 library(ggplot2)
 library(pathview)
-library(gage)
+
 
 #Read the transcriptomics data
 design <- read.delim("./design.txt")
@@ -55,7 +55,7 @@ transcrip<-dplyr::select(Pval.annot, Name, GeneName, logFC)
 #The .csv should contain TWO COLUMNS, the first is the ID column from the excel file.
 #The second column is "l.h" column from the excel file
 #Column names should be "ID" and "l.h"
-proteom_raw<-read.delim("PATH TO THE FILE", sep = "\t")
+proteom_raw<-read.delim("PATH TO FILE", sep = "\t")
 #Remove NAs from raw data
 proteom<-filter(proteom_raw, l.h != "NA")
 #Get the Uniprot ID from the ID column of proteome data which is in this form: "sw|P00331|ADH2_YEAST"
